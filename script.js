@@ -9,8 +9,7 @@ canvas.height = 600;
 
 // Load Player Car Image
 const carImg = new Image();
-carImg.src = "images/car.png"; // Your player car imagegit init
-
+carImg.src = "images/car.png"; // Your player car image
 
 // Load Enemy Car Images (different colors)
 const enemyCarImages = [new Image(), new Image(), new Image()];
@@ -39,11 +38,30 @@ let enemySpeed = 4;
 let score = 0;
 let gameOver = false;
 let gameStarted = false; // To control countdown before game start
+let spawnTimeoutId = null; // to store timeout id for spawning enemies
 
 // Key controls
 const keys = {};
 document.addEventListener("keydown", (e) => keys[e.key] = true);
 document.addEventListener("keyup", (e) => keys[e.key] = false);
+
+// Mobile button controls
+const leftBtn = document.getElementById('leftBtn');
+const rightBtn = document.getElementById('rightBtn');
+const restartBtn = document.getElementById('restartBtn');
+
+leftBtn.addEventListener('touchstart', () => keys["ArrowLeft"] = true);
+leftBtn.addEventListener('touchend', () => keys["ArrowLeft"] = false);
+leftBtn.addEventListener('mousedown', () => keys["ArrowLeft"] = true);
+leftBtn.addEventListener('mouseup', () => keys["ArrowLeft"] = false);
+
+rightBtn.addEventListener('touchstart', () => keys["ArrowRight"] = true);
+rightBtn.addEventListener('touchend', () => keys["ArrowRight"] = false);
+rightBtn.addEventListener('mousedown', () => keys["ArrowRight"] = true);
+rightBtn.addEventListener('mouseup', () => keys["ArrowRight"] = false);
+
+// Restart button click event
+restartBtn.addEventListener('click', resetGame);
 
 // Draw player car
 function drawPlayer() {
@@ -63,13 +81,36 @@ function drawEnemies() {
     });
 }
 
-// Spawn new enemy car
+// Spawn new enemy car, avoiding horizontal overlap
 function spawnEnemy() {
     const enemyWidth = 50;
     const enemyHeight = 90;
-    const enemyX = Math.floor(Math.random() * (canvas.width - enemyWidth));
+
+    let enemyX;
+    let tries = 0;
+    const maxTries = 10;
+
+    do {
+        enemyX = Math.floor(Math.random() * (canvas.width - enemyWidth));
+        tries++;
+        // Check if this X is too close (< enemyWidth) to any existing enemy
+        const tooClose = enemies.some(e => Math.abs(e.x - enemyX) < enemyWidth);
+        if (!tooClose) break;
+    } while (tries < maxTries);
+
     const randomCarImg = enemyCarImages[Math.floor(Math.random() * enemyCarImages.length)];
     enemies.push({ x: enemyX, y: -enemyHeight, width: enemyWidth, height: enemyHeight, img: randomCarImg });
+}
+
+// Spawn enemies repeatedly with random delay between 1.2s and 2.2s
+function startSpawning() {
+    function spawnWithRandomDelay() {
+        if (gameOver) return; // stop spawning if game over
+        spawnEnemy();
+        const delay = 1200 + Math.random() * 1000; // 1200ms to 2200ms
+        spawnTimeoutId = setTimeout(spawnWithRandomDelay, delay);
+    }
+    spawnWithRandomDelay();
 }
 
 // Update game state
@@ -96,6 +137,11 @@ function update() {
             gameOver = true;
             racingSound.pause();
             collisionSound.play();
+
+            if(spawnTimeoutId) {
+                clearTimeout(spawnTimeoutId);
+                spawnTimeoutId = null;
+            }
         }
     });
 
@@ -105,7 +151,7 @@ function update() {
 
 // Draw background road
 function drawRoad() {
-    ctx.fillStyle = "#555";
+    ctx.fillStyle = "#333";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.strokeStyle = "white";
@@ -136,8 +182,13 @@ function gameLoop() {
         ctx.fillStyle = "white";
         ctx.font = "20px Arial";
         ctx.fillText(`Final Score: ${score}`, 140, 340);
+
+        restartBtn.style.display = 'block';  // Show restart button
+
         return;
     }
+
+    restartBtn.style.display = 'none';  // Hide restart button during game
 
     drawRoad();
     drawPlayer();
@@ -146,6 +197,23 @@ function gameLoop() {
     update();
 
     requestAnimationFrame(gameLoop);
+}
+
+// Reset and restart the game
+function resetGame() {
+    // Reset variables
+    player.x = canvas.width / 2 - 25;
+    player.y = canvas.height - 100;
+    enemies = [];
+    enemySpeed = 4;
+    score = 0;
+    gameOver = false;
+
+    restartBtn.style.display = 'none';
+    racingSound.pause();
+    racingSound.currentTime = 0;
+
+    startCountdown();
 }
 
 // Countdown before start
@@ -165,7 +233,7 @@ function startCountdown() {
             clearInterval(countdownInterval);
             gameStarted = true;
             racingSound.play();
-            setInterval(spawnEnemy, 1500);
+            startSpawning(); // start spawning enemies with random delay now
             gameLoop();
         }
     }, 1000);
